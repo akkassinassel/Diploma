@@ -1,160 +1,153 @@
-#include <IRremote.h>         // подключение библиотеки для работы с ИК приёмником   
-int RECV_PIN = 12;            // порт Arduino для получения сигналов от ИК приёмника         
-IRrecv irrecv(RECV_PIN);      // объект для работы с ИК приёмником        
-decode_results results;       // объект для хранения результатов приёма команд от пульта управления     
-#define IR_Go      0x00ff629d // команда «ВПЕРЕД», кнопка «СТРЕЛКА ВВЕРХ»
-#define IR_Back    0x00ffa857 // команда «НАЗАД», кнопка «СТРЕЛКА ВНИЗ»
-#define IR_Left    0x00ff22dd // команда «НАЛЕВО», кнопка «СТРЕЛКА ВЛЕВО»
-#define IR_Right   0x00ffc23d // команда «НАПРАВО», кнопка «СТРЕЛКА ВПРАВО»
-#define IR_Stop    0x00ff02fd // команда «СТОП», кнопка «OK»
-#define IR_ESC     0x00ff52ad // команда «СБРОС», кнопка «#»
-#define IR_Mode    0x00ff42bd // команда «РЕЖИМ», кнопка «*»
+#include <IRremote.h>        
+int RECV_PIN = 12;            
+IRrecv irrecv(RECV_PIN);           
+decode_results results;         
+#define IR_Go      0x00ff629d 
+#define IR_Back    0x00ffa857 
+#define IR_Left    0x00ff22dd 
+#define IR_Right   0x00ffc23d 
+#define IR_Stop    0x00ff02fd 
+#define IR_ESC     0x00ff52ad 
+#define IR_Mode    0x00ff42bd 
 
-#define IR_Slowdown    0x00ff6897 // команда «МЕДЛЕННЕЕ», кнопка «1»
-#define IR_Speedup     0x00ff9867 // команда «БЫСТРЕЕ», кнопка «2»
+#define IR_Slowdown    0x00ff6897 
+#define IR_Speedup     0x00ff9867 
 
-/* Полный список кодов кнопок пульта смотрите в инструкции, входящей в состав данного набора */ 
+int echoPin=A0;           
+int trigPin=A1;           
 
-int echoPin=A0;           // порт для контакта ECHO модуля HC-SR04
-int trigPin=A1;           // порт для контакта TRIG модуля HC-SR04   
+#define Lpwm_pin  5       
+#define Rpwm_pin  10     
 
-#define Lpwm_pin  5       // порт для регулирования скорости левого колеса    (ENA) 
-#define Rpwm_pin  10      // порт для регулирования скорости правого колеса   (ENB)
+int pinLB=2;           
+int pinLF=4;           
+int pinRB=7;           
+int pinRF=8;           
 
-/* Назначение портов управления H-мостом драйвера L298N */
+unsigned char LRpwm_val = 100; 
 
-int pinLB=2;           // для заднего хода левого колеса      (IN1)
-int pinLF=4;           // для вращения левого колеса вперед   (IN2)
-int pinRB=7;           // для заднего хода правого колеса     (IN3)
-int pinRF=8;           // для вращения правого колеса вперед  (IN4)
+unsigned char mode = 0;			
 
-unsigned char LRpwm_val = 100;  // скорость вращения колес
+int Car_state=0;       
 
-unsigned char mode = 0;			// переменная для определения текущего режима: 0 — режим дистанционного управления, 1 — автономный режим избегания препятствий   
 
-int Car_state=0;        // переменная для хранения состояния машинки   
 
-/* ******* Управление серводвигателем ******* */
+int servopin=1;                 
+int myangle;                    
+int pulsewidth;                
+unsigned char midPosition=60;   
 
-int servopin=1;                 // порт для подключения сигнального провода серводвигателя
-int myangle;                    // переменная для хранения угла поворота вала серводвигателя
-int pulsewidth;                 // переменная для хранения ширины импульса
-unsigned char midPosition=60;   // инициализация угла поворота 60°, нейтральное положение датчика HC-SR04, при котором он направлен вперед
-
-void servopulse(int servopin,int myangle) // функция управления сервоприводом
+void servopulse(int servopin,int myangle) 
 {
-  pulsewidth=(myangle*11)+500;        // перевод угла в ширину импульса в диапазоне от 500 мкс до 2480 мкс
+  pulsewidth=(myangle*11)+500;        
   
-  digitalWrite(servopin,HIGH);        // на сигнальном проводе выставляется ВЫСОКИЙ уровень
-  delayMicroseconds(pulsewidth);      // ВЫСОКИЙ уровень удерживается вычисленную длительность (ширина импульса)
-  digitalWrite(servopin,LOW);         // на сигнальном проводе устанавливается НИЗКИЙ уровень
-  delay(20-pulsewidth/1000);          // ожидание начала следующей итерации           
+  digitalWrite(servopin,HIGH);        
+  delayMicroseconds(pulsewidth);      
+  digitalWrite(servopin,LOW);         
+  delay(20-pulsewidth/1000);          
 }
 
-void Set_servopulse(int set_val)      // Функция для управления серводвигателем               
+void Set_servopulse(int set_val)            
 {
   for(int i=0;i<=10;i++)            
     servopulse(servopin,set_val);   
 }
 
-/* *********************************** */
 
 
-void M_Control_IO_config(void)  // конфигурирование портов платы Arduino   
+
+void M_Control_IO_config(void)  
 {
-  pinMode(pinLB,OUTPUT);      // цифровой порт 2, ВЫХОД   
-  pinMode(pinLF,OUTPUT);      // цифровой порт 4, ВЫХОД  
-  pinMode(pinRB,OUTPUT);      // цифровой порт 7, ВЫХОД   
-  pinMode(pinRF,OUTPUT);      // цифровой порт 8, ВЫХОД  
-  pinMode(Lpwm_pin,OUTPUT);   // цифровой порт 5, ВЫХОД (ШИМ/PWM) 
-  pinMode(Rpwm_pin,OUTPUT);   // цифровой порт 10, ВЫХОД (ШИМ/PWM)   
+  pinMode(pinLB,OUTPUT);     
+  pinMode(pinLF,OUTPUT);     
+  pinMode(pinRB,OUTPUT);     
+  pinMode(pinRF,OUTPUT);    
+  pinMode(Lpwm_pin,OUTPUT);   
+  pinMode(Rpwm_pin,OUTPUT);   
 }
 
-void Set_Speed(unsigned char Left,unsigned char Right)  // Установка скорости вращения колес      
+void Set_Speed(unsigned char Left,unsigned char Right)  
 {
   analogWrite(Lpwm_pin,Left);         
   analogWrite(Rpwm_pin,Right);
 }
 
-void slowdown() {             // уменьшение скорости   
+void slowdown() {           
   if(LRpwm_val>80) {LRpwm_val-=20;}
   
   Set_Speed(LRpwm_val, LRpwm_val);
 }  
 
-void speedup() {              // увеличение скорости
+void speedup() {            
   if(LRpwm_val<230) {LRpwm_val+=20;}
   
   Set_Speed(LRpwm_val, LRpwm_val);
 }                   
 
-void advance()                // движение вперед
+void advance()              
     {
-     digitalWrite(pinRB,LOW);   // правое колесо вращается вперед
-     digitalWrite(pinRF,HIGH);  // правое колесо вращается вперед
-     digitalWrite(pinLB,LOW);   // левое колесо вращается назад
-     digitalWrite(pinLF,HIGH);  // левое колесо вращается назад
+     digitalWrite(pinRB,LOW);   
+     digitalWrite(pinRF,HIGH); 
+     digitalWrite(pinLB,LOW);
+     digitalWrite(pinLF,HIGH);  
      Car_state = 1;   
     }
-void turnR()                  // поворот по часовой стрелке
+void turnR()                  
     {
-     digitalWrite(pinRB,HIGH);  // правое колесо вращается назад
-     digitalWrite(pinRF,LOW);   // правое колесо вращается назад
-     digitalWrite(pinLB,LOW);   // левое колесо вращается вперед
-     digitalWrite(pinLF,HIGH);  // левое колесо вращается вперед
+     digitalWrite(pinRB,HIGH);  
+     digitalWrite(pinRF,LOW);   
+     digitalWrite(pinLB,LOW);   
+     digitalWrite(pinLF,HIGH);  
      Car_state = 4;
     }
-void turnL()                  // поворот против часовой стрелки
+void turnL()                
     {
-     digitalWrite(pinRB,LOW);   // правое колесо вращается вперед
-     digitalWrite(pinRF,HIGH);  // правое колесо вращается вперед
-     digitalWrite(pinLB,HIGH);  // левое колесо вращается назад
-     digitalWrite(pinLF,LOW);   // левое колесо вращается назад
+     digitalWrite(pinRB,LOW);  
+     digitalWrite(pinRF,HIGH);  
+     digitalWrite(pinLB,HIGH);  
+     digitalWrite(pinLF,LOW);  
      Car_state = 3;
     }    
-void stopp()                  // остановка
+void stopp()              
     {
-     digitalWrite(pinRB,HIGH);  // правое колесо неподвижно
-     digitalWrite(pinRF,HIGH);  // правое колесо неподвижно
-     digitalWrite(pinLB,HIGH);  // левое колесо неподвижно
-     digitalWrite(pinLF,HIGH);  // левое колесо неподвижно
+     digitalWrite(pinRB,HIGH);  
+     digitalWrite(pinRF,HIGH);  
+     digitalWrite(pinLB,HIGH);  
+     digitalWrite(pinLF,HIGH);  
      Car_state = 5;
     }
-void back()                   // движение назад
+void back()                   
     {
-     digitalWrite(pinRB,HIGH);  // правое колесо вращается назад
-     digitalWrite(pinRF,LOW);   // правое колесо вращается назад
-     digitalWrite(pinLB,HIGH);  // левое колесо вращается назад
-     digitalWrite(pinLF,LOW);   // левое колесо вращается назад
+     digitalWrite(pinRB,HIGH);  
+     digitalWrite(pinRF,LOW);   
+     digitalWrite(pinLB,HIGH);  
+     digitalWrite(pinLF,LOW);   
      Car_state = 2;  
     }
 
-/* ******* Дистанционное управление ******** */
-         
-void IR_Control(void)           // обработка сигналов от пульта управления      
+
+void IR_Control(void)           
 {
-   unsigned long Key;           // переменная для хранения полученной команды
+   unsigned long Key;         
   
-  if(irrecv.decode(&results)&&mode==1) {      // если машинка в режиме самоуправления (режим «1») и ИК приёмник принял какой-то сигнал…     
-    if (results.value==IR_Mode || results.value==IR_Stop || results.value==IR_ESC) mode = 0;     // …и это сигнал с кодом кнопки «*», «#» или «OK» то изменить режим самоуправления на режим управления пультом (режим «0»)
-  } else  if (irrecv.decode(&results)&&mode==0) {                                   // иначе выполнить код ниже:
-      
-    while(Key!=IR_ESC)            // цикл выполняется, пока не будет получена команда «СБРОС» (кнопка «#» на пульте)   
+  if(irrecv.decode(&results)&&mode==1) {      
+    if (results.value==IR_Mode || results.value==IR_Stop || results.value==IR_ESC) mode = 0;     
+  } else  if (irrecv.decode(&results)&&mode==0) {                                   
+    while(Key!=IR_ESC)            
     {
-     if(irrecv.decode(&results))  // проверка: получено ли новое значение   
+     if(irrecv.decode(&results))  
      {
-      Key = results.value;        // полученный от пульта код записывается в переменную Key                        
-      
-      if (mode == 0) {             // если машинка все еще в режиме управления пультом (режим «0»), то обрабатывается полученный сигнал      
+      Key = results.value;     
+      if (mode == 0) {             
         switch(Key)
          {
-           case IR_Go: advance();         // если нажата клавиша «вверх», то ехать вперед    
+           case IR_Go: advance();        
            break;
-           case IR_Back: back();          // если нажата клавиша «вниз», то ехать назад
+           case IR_Back: back();          
            break;
-           case IR_Left: turnL();         // если нажата клавиша «налево», то поворачивать налево    
+           case IR_Left: turnL();           
            break;
-           case IR_Right: turnR();        // если нажата клавиша «направо», то поворачивать направо
+           case IR_Right: turnR();        
            break;
            case IR_Slowdown: slowdown();  // если нажать кнопку «1», то скорость снизится       
            break;
@@ -207,33 +200,33 @@ void Self_Control(void)     // функция для организации са
         int R = Ultrasonic_Ranging(); // измерить расстояние до препятствий   
         delay(300);      
 
-        if(L > R)                 // если слева больше свободного пространства, то…   
+        if(L > R)          
         {
-           back();                // сдать назад   
+           back();               
            delay(100);      
-           turnL();               // повернуть налево
+           turnL();               
            delay(400);                  
-           stopp();               // остановиться
+           stopp();           
            delay(50);            
-           Set_servopulse(midPosition); // установить датчик в нейтральное положение
-           H = Ultrasonic_Ranging();    // измерить расстояние   
+           Set_servopulse(midPosition); 
+           H = Ultrasonic_Ranging();   
            delay(500); 
         }
           
-        if(L <= R)                  // если справа больше свободного пространства, то…    
+        if(L <= R)                
         {
-           back();                  // сдать назад
+           back();             
            delay(100);  
-           turnR();                 // повернуть направо
+           turnR();               
            delay(400);   
-           stopp();                 // остановиться
+           stopp();                
            delay(50);            
-           Set_servopulse(midPosition); // установить датчик в нейтральное положение
-           H = Ultrasonic_Ranging();    // измерить расстояние 
+           Set_servopulse(midPosition); 
+           H = Ultrasonic_Ranging();   
            delay(300);        
         }   
         
-        if (L < 25 && R < 25)       // если и справа, и слева препятствия слишком близко, то сдать назад     
+        if (L < 25 && R < 25)       
         {
            stopp();            
            delay(50);
@@ -241,42 +234,41 @@ void Self_Control(void)     // функция для организации са
            delay(50);                   
         }          
       }
-      else                          // если впереди нет препятствий, то продолжать движение прямо  
+      else                         
       {
       advance();                
       }                 
 }
 
-int Ultrasonic_Ranging()  // функция для определения расстояния с помощью ультразвукового датчика расстояния HC-SR04
+int Ultrasonic_Ranging()  
 { 
-  // генерация сигнала для определения расстояния:          
+      
   digitalWrite(trigPin, LOW);  
   delayMicroseconds(2); 
   digitalWrite(trigPin, HIGH); 
   delayMicroseconds(10); 
   digitalWrite(trigPin, LOW); 
      
-    int distance = pulseIn(echoPin, HIGH);      // определение частоты входного сигнала
-    distance= distance/58;                      // перевод частоты в расстояние
+    int distance = pulseIn(echoPin, HIGH);     
+    distance= distance/58;                      
      
     return distance;
 } 
 
-/* ******************************* */
 
 
 void setup() 
 { 
-   M_Control_IO_config();           // конфигурирование портов Arduino      
-   Set_Speed(LRpwm_val, LRpwm_val); // установка изначальной скорости вращения колес
-   //irrecv.enableIRIn();             // включение приёма команд от пульта   
-   Serial.begin(9600);              // инициализация последовательного порта со скоростью 9600 бод
-   stopp();                         // остановка машинки 
+   M_Control_IO_config();             
+   Set_Speed(LRpwm_val, LRpwm_val); 
+   //irrecv.enableIRIn();               
+   Serial.begin(9600);             
+   stopp();                         
 
-   pinMode(servopin,OUTPUT);        // порт управления серводвигателем
-   Set_servopulse(midPosition);     // установка датчика расстояния в нейтральное положение
-   pinMode(echoPin, INPUT);         // порт считывания показаний с датчика расстояния   
-   pinMode(trigPin, OUTPUT);        // порт отправки сигналов на датчик расстояния            
+   pinMode(servopin,OUTPUT);        
+   Set_servopulse(midPosition);     
+   pinMode(echoPin, INPUT);         
+   pinMode(trigPin, OUTPUT);                
    
 }
 
@@ -284,9 +276,9 @@ void loop()
 {  
    //if (irrecv.decode(&results)) {
      // IR_Control();
-      //irrecv.resume();        // приём следующего значения    
+      //irrecv.resume();      
   //} 
   
-  //if (mode==1)                // если выбран автономный режим, то выполнить функцию самоуправления   
+  //if (mode==1)                
     Self_Control(); 
 }
