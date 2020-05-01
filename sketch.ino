@@ -149,39 +149,39 @@ void IR_Control(void)
            break;
            case IR_Right: turnR();        
            break;
-           case IR_Slowdown: slowdown();  // если нажать кнопку «1», то скорость снизится       
+           case IR_Slowdown: slowdown();       
            break;
-           case IR_Speedup: speedup();    // если нажать кнопку «2», то скорость повысится       
+           case IR_Speedup: speedup();          
            break;
-           case IR_Stop: stopp();         // если нажать кнопку «OK», то остановиться       
+           case IR_Stop: stopp();             
            break;
-           case IR_Mode: mode = 1;        // если нажать кнопку «*», то машинка перейдет в режим самоуправления (режим «1»)       
+           case IR_Mode: mode = 1;              
            break;
            default:
            break;      
          }
       } 
-     else break;                 // выход из цикла, если на предыдущей итерации был переход в режим «1»
+     else break;                 
 
-     irrecv.resume();            // получение следующего значения
+     irrecv.resume();            
     }
   }
   }
   stopp();
 }
 
-/* ******** Автономный режим ********* */
 
-void Self_Control(void)     // функция для организации самоуправления
+
+void Self_Control(void)     
 {
-   int H;                         // переменная для хранения расстояния до препятствия перед машинкой        
+   int H;                                
 
-   Set_servopulse(midPosition);   // возвращение вала серводвигателя в нейтральную позицию  
+   Set_servopulse(midPosition);    
 
    H = Ultrasonic_Ranging();
    delay(300);   
    
-   if(H < 15)                     // если препятствие слишком близко, то остановиться и сдать назад           
+   if(H < 15)                               
    {
        stopp();              
        delay(100);
@@ -189,15 +189,15 @@ void Self_Control(void)     // функция для организации са
        delay(50);
     }
            
-  if(H < 35)                      // если впереди препятствие, то…                    
+  if(H < 35)                                         
       {
-        stopp();                  // остановиться   
+        stopp();                  
         delay(100);            
-        Set_servopulse(5);        // повернуть датчик налево
-        int L = Ultrasonic_Ranging(); // измерить расстояние до препятствий
+        Set_servopulse(5);        
+        int L = Ultrasonic_Ranging(); 
         delay(300);      
-         Set_servopulse(177);     // повернуть датчик направо   
-        int R = Ultrasonic_Ranging(); // измерить расстояние до препятствий   
+         Set_servopulse(177);        
+        int R = Ultrasonic_Ranging();   
         delay(300);      
 
         if(L > R)          
