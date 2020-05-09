@@ -111,30 +111,64 @@ int H;
 void loop() 
 { 
   while (BT.available()){  
-  delay(10); 
-  char c = BT.read(); 
-  readvoice += c; 
+    delay(10);
+    char c = BT.read(); 
+    readvoice += c; 
   } 
   if (readvoice.length() > 0) {
     Serial.println(readvoice);
-                         
-  
-  delay(300); 
-  if(readvoice == "*forward#"){
-    advance();
-  }else if(readvoice == "*back#"){
-    back();
-  }else if (readvoice == "*left#"){
-    turnL();
-    delay(500);
-    stopp();
-  }else if (readvoice == "*right#"){ 
-    turnR();
-    delay(500);
-    stopp();
-  }else if (readvoice == "*stop#"){
-    stopp();
-  }
+    delay(300); 
+    String readvoice1;
+   
+    if(readvoice == "*forward#"){
+      while (readvoice == "*forward#"){
+        H = Ultrasonic_Ranging();
+        delay(300);     
+        if(H < 50){
+          stopp();
+        } 
+        else{
+          advance();
+        }
+        while (BT.available()){  
+          delay(10); 
+          char c = BT.read(); 
+          readvoice += c; 
+        }
+      }
+    }else if(readvoice == "*back#"){
+      back();
+    }else if (readvoice == "*left#"){
+      turnL();
+      delay(500);
+      stopp();
+    }else if (readvoice == "*right#"){ 
+      turnR();
+      delay(500);
+      stopp();
+    }else if (readvoice == "*stop#"){
+      stopp();
+    }else if (readvoice == "*back for 1 second#"){
+      back();
+      delay(1000);
+      stopp();
+    }else if (readvoice == "*back for 2 seconds#"){
+      back();
+      delay(2000);
+      stopp();
+    }else if (readvoice == "*back for 3 seconds#"){
+      back();
+      delay(3000);
+      stopp();
+    }else if (readvoice == "*back for 4 seconds#"){
+      back();
+      delay(4000);
+      stopp();
+    }else if (readvoice == "*back for 5 seconds#"){
+      back();
+      delay(5000);
+      stopp();
+    }
    readvoice="";
   }
 }
