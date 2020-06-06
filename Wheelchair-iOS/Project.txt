@@ -1,0 +1,437 @@
+import UIKit
+import Contacts
+
+extension UIColor {
+  static let appBlue = UIColor(red: 128.0 / 255.0, green: 128.0 / 255.0, blue: 128.0 / 255.0, alpha: 1)
+}
+
+@UIApplicationMain
+class AppDelegate: UIResponder, UIApplicationDelegate {
+    var window: UIWindow?
+    
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        window?.backgroundColor = .white
+        
+        UINavigationBar.appearance().barStyle = .default
+        UINavigationBar.appearance().barTintColor = .appBlue
+        UINavigationBar.appearance().tintColor = .white
+    UINavigationBar.appearance().isOpaque = true
+    UINavigationBar.appearance().titleTextAttributes = [.foregroundColor: UIColor.white]
+        UITabBar.appearance().tintColor = .appBlue
+    
+    CNContactStore().requestAccess(for: .contacts) { (access, error) in
+      print("Access: \(access)")
+    }
+    
+        return true
+    }
+}
+import UIKit
+import ContactsUI
+
+class FriendsViewController: UITableViewController {
+  var friendsList = Friend.defaultContacts()
+  
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    navigationItem.titleView = UIImageView(image: UIImage(named: "RWConnectTitle")!)
+  }
+  
+  override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+    navigationController?.navigationBar.tintColor = .white
+  }
+
+  override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+    if
+      segue.identifier == "EditFriendSegue",
+      // 1
+      let cell = sender as? FriendCell,
+      let indexPath = tableView.indexPath(for: cell),
+      let editViewController = segue.destination as? EditFriendTableViewController {
+        let friend = friendsList[indexPath.row]
+        // 2
+        let store = CNContactStore()
+        // 3
+        let predicate = CNContact.predicateForContacts(matchingEmailAddress: friend.workEmail)
+        // 4
+        let keys = [CNContactPhoneNumbersKey as CNKeyDescriptor]
+        // 5
+        if
+          let contacts = try? store.unifiedContacts(matching: predicate, keysToFetch: keys),
+          let contact = contacts.first,
+          let contactPhone = contact.phoneNumbers.first {
+          // 6
+            friend.storedContact = contact.mutableCopy() as? CNMutableContact
+            friend.phoneNumberField = contactPhone
+            friend.identifier = contact.identifier
+        }
+        editViewController.friend = friend
+    }
+  }
+  
+  @IBAction private func addFriends(sender: UIBarButtonItem) {
+    // 1
+    let contactPicker = CNContactPickerViewController()
+    contactPicker.delegate = self
+    // 2
+    contactPicker.predicateForEnablingContact = NSPredicate(format: "emailAddresses.@count > 0")
+    present(contactPicker, animated: true)
+  }
+  
+}
+
+//MARK: - UITableViewDataSource
+extension FriendsViewController {
+  override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+    return friendsList.count
+  }
+  
+  override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+    let cell = tableView.dequeueReusableCell(withIdentifier: "FriendCell", for: indexPath)
+    
+    if let cell = cell as? FriendCell {
+      let friend = friendsList[indexPath.row]
+      cell.friend = friend
+    }
+    
+    return cell
+  }
+}
+
+//MARK: - UITableViewDelegate
+extension FriendsViewController {
+  override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    tableView.deselectRow(at: indexPath, animated: true)
+    // 1
+    let friend = friendsList[indexPath.row]
+    let contact = friend.contactValue
+    // 2
+    let contactViewController = CNContactViewController(forUnknownContact: contact)
+    contactViewController.hidesBottomBarWhenPushed = true
+    contactViewController.allowsEditing = false
+    contactViewController.allowsActions = false
+    // 3
+    navigationController?.navigationBar.tintColor = .appBlue
+    navigationController?.pushViewController(contactViewController, animated: true)
+  }
+}
+
+//MARK: - CNContactPickerDelegate
+extension FriendsViewController: CNContactPickerDelegate {
+  func contactPicker(_ picker: CNContactPickerViewController,
+                     didSelect contacts: [CNContact]) {
+    let newFriends = contacts.compactMap { Friend(contact: $0) }
+    for friend in newFriends {
+      if !friendsList.contains(friend) {
+        friendsList.append(friend)
+      }
+    }
+    tableView.reloadData()
+  }
+}
+import UIKit
+import Contacts
+
+class EditFriendTableViewController: UITableViewController {
+  @IBOutlet private weak var nameLabel: UILabel!
+  @IBOutlet private weak var emailLabel: UILabel!
+  @IBOutlet private weak var phoneTypeLabel: UILabel!
+  @IBOutlet private weak var phoneTextField: UITextField!
+  @IBOutlet private weak var saveButton: UIButton!
+
+  var friend: Friend?
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+    setup()
+  }
+
+  private func setup() {
+    guard let friend = friend else {
+      nameLabel.text = ""
+      emailLabel.text = ""
+      phoneTextField.text = ""
+      phoneTextField.isEnabled = false
+      return
+    }
+    let formatter = CNContactFormatter()
+    formatter.style = .fullName
+    if let name = formatter.string(from: friend.contactValue) {
+      nameLabel.text = name
+    } else {
+      nameLabel.text = "Name Not Available"
+    }
+    emailLabel.text = friend.workEmail
+    if let phoneNumberField = friend.phoneNumberField,
+      let label = phoneNumberField.label {
+      phoneTypeLabel.text = CNLabeledValue<CNPhoneNumber>.localizedString(forLabel: label)
+      phoneTextField.text = phoneNumberField.value.stringValue
+    }
+  }
+
+  @IBAction private func save(_ sender: Any) {
+    phoneTextField.resignFirstResponder()
+    let store = CNContactStore()
+    guard let friend = friend,
+      let phoneNumberText = phoneTextField.text else { return }
+    let phoneNumberValue = CNPhoneNumber(stringValue: phoneNumberText)
+    let saveRequest = CNSaveRequest()
+    
+    if let storedContact = friend.storedContact,
+      let phoneNumberToEdit = storedContact.phoneNumbers.first(
+        where: { $0 == friend.phoneNumberField }
+      ),
+      let index = storedContact.phoneNumbers.firstIndex(of: phoneNumberToEdit) {
+      
+      // 1
+      let newPhoneNumberField = phoneNumberToEdit.settingValue(phoneNumberValue)
+      storedContact.phoneNumbers.remove(at: index)
+      storedContact.phoneNumbers.insert(newPhoneNumberField, at: index)
+      friend.phoneNumberField = newPhoneNumberField
+      // 2
+      saveRequest.update(storedContact)
+      friend.storedContact = nil
+    } else if let unsavedContact = friend.contactValue.mutableCopy() as? CNMutableContact {
+      // 3
+      let phoneNumberField = CNLabeledValue(label: CNLabelPhoneNumberMain,
+                                            value: phoneNumberValue)
+      unsavedContact.phoneNumbers = [phoneNumberField]
+      friend.phoneNumberField = phoneNumberField
+      // 4
+      saveRequest.add(unsavedContact, toContainerWithIdentifier: nil)
+    }
+
+    do {
+      try store.execute(saveRequest)
+      let controller = UIAlertController(title: "Success",
+                                         message: nil,
+                                         preferredStyle: .alert)
+      controller.addAction(UIAlertAction(title: "OK", style: .default))
+      present(controller, animated: true)
+      setup()
+    } catch {
+      print(error)
+    }
+  }
+}
+import UIKit
+import Contacts
+
+class Friend {
+  let firstName: String
+  let lastName: String
+  let workEmail: String
+  var identifier: String?
+  let profilePicture: UIImage?
+  var storedContact: CNMutableContact?
+  var phoneNumberField: (CNLabeledValue<CNPhoneNumber>)?
+  
+  init(firstName: String, lastName: String, workEmail: String, profilePicture: UIImage?){
+    self.firstName = firstName
+    self.lastName = lastName
+    self.workEmail = workEmail
+    self.profilePicture = profilePicture
+  }
+  
+  static func defaultContacts() -> [Friend] {
+    return [
+      Friend(firstName: "Fire", lastName: "Department", workEmail: "sos@example.com", profilePicture: UIImage(named: "1")),
+      Friend(firstName: "Police", lastName: "Department", workEmail: "police@example.com", profilePicture: UIImage(named: "2")),
+      Friend(firstName: "Ambulance", lastName: "", workEmail: "ambulance@example.com", profilePicture: UIImage(named: "3")),
+      Friend(firstName: "Medical", lastName: "Call Centre", workEmail: "call@example.com", profilePicture: UIImage(named: "4"))]
+  }
+}
+
+extension Friend: Equatable {
+  static func ==(lhs: Friend, rhs: Friend) -> Bool{
+    return lhs.firstName == rhs.firstName &&
+      lhs.lastName == rhs.lastName &&
+      lhs.workEmail == rhs.workEmail &&
+      lhs.profilePicture == rhs.profilePicture
+  }
+}
+
+extension Friend {
+  var contactValue: CNContact {
+    let contact = CNMutableContact()
+    contact.givenName = firstName
+    contact.familyName = lastName
+    contact.emailAddresses = [CNLabeledValue(label: CNLabelWork, value: workEmail as NSString)]
+    if let profilePicture = profilePicture {
+      let imageData = profilePicture.jpegData(compressionQuality: 1)
+      contact.imageData = imageData
+    }
+    if let phoneNumberField = phoneNumberField {
+      contact.phoneNumbers.append(phoneNumberField)
+    }
+    return contact.copy() as! CNContact
+  }
+  
+  convenience init?(contact: CNContact) {
+    guard let email = contact.emailAddresses.first else { return nil }
+    let firstName = contact.givenName
+    let lastName = contact.familyName
+    let workEmail = email.value as String
+    var profilePicture: UIImage?
+    if let imageData = contact.imageData {
+      profilePicture = UIImage(data: imageData)
+    }
+    self.init(firstName: firstName, lastName: lastName, workEmail: workEmail, profilePicture: profilePicture)
+    if let contactPhone = contact.phoneNumbers.first {
+      phoneNumberField = contactPhone
+    }
+  }
+}
+import UIKit
+import Contacts
+
+class FriendCell: UITableViewCell {
+  @IBOutlet private weak var contactNameLabel: UILabel!
+  @IBOutlet private weak var contactEmailLabel: UILabel!
+  @IBOutlet private weak var contactImageView: UIImageView! {
+    didSet {
+      contactImageView.layer.masksToBounds = true
+      contactImageView.layer.cornerRadius = 22.0
+    }
+  }
+  
+  var friend : Friend? {
+    didSet {
+      configureCell()
+    }
+  }
+  
+  private func configureCell() {
+    let formatter = CNContactFormatter()
+    formatter.style = .fullName
+    guard let friend = friend,
+      let name = formatter.string(from: friend.contactValue) else { return }
+    contactNameLabel.text = name
+    contactEmailLabel.text = friend.workEmail
+    contactImageView.image = friend.profilePicture ?? UIImage(named: "PlaceholderProfilePic")
+  }
+}
+
+import UIKit
+import MapKit
+
+class MapView: UIViewController {
+  @IBOutlet private var mapView: MKMapView!
+  
+    override func viewDidLoad() {
+        super.viewDidLoad()
+      
+      let initialLocation = CLLocation(latitude: 43.238949, longitude: 76.889709)
+      mapView.centerToLocation(initialLocation)
+
+    }
+  }
+
+private extension MKMapView {
+  func centerToLocation(
+    _ location: CLLocation,
+    regionRadius: CLLocationDistance = 1000
+  ) {
+    let coordinateRegion = MKCoordinateRegion(
+      center: location.coordinate,
+      latitudinalMeters: regionRadius,
+      longitudinalMeters: regionRadius)
+    setRegion(coordinateRegion, animated: true)
+  }
+}
+import Foundation
+import MapKit
+import Contacts
+
+class Artwork: NSObject, MKAnnotation {
+  let title: String?
+  let locationName: String?
+  let discipline: String?
+  let coordinate: CLLocationCoordinate2D
+  
+  init(
+    title: String?,
+    locationName: String?,
+    discipline: String?,
+    coordinate: CLLocationCoordinate2D
+  ) {
+    self.title = title
+    self.locationName = locationName
+    self.discipline = discipline
+    self.coordinate = coordinate
+    
+    super.init()
+  }
+  
+  init?(feature: MKGeoJSONFeature) {
+    // 1
+    guard
+      let point = feature.geometry.first as? MKPointAnnotation,
+      // 2
+      let propertiesData = feature.properties,
+      let json = try? JSONSerialization.jsonObject(with: propertiesData),
+      let properties = json as? [String: Any]
+      else {
+        return nil
+    }
+    
+    // 3
+    title = properties["title"] as? String
+    locationName = properties["location"] as? String
+    discipline = properties["discipline"] as? String
+    coordinate = point.coordinate
+    super.init()
+  }
+  
+  var subtitle: String? {
+    return locationName
+  }
+  
+  var mapItem: MKMapItem? {
+    guard let location = locationName else {
+      return nil
+    }
+    
+    let addressDict = [CNPostalAddressStreetKey: location]
+    let placemark = MKPlacemark(
+      coordinate: coordinate,
+      addressDictionary: addressDict)
+    let mapItem = MKMapItem(placemark: placemark)
+    mapItem.name = title
+    return mapItem
+  }
+  
+  var markerTintColor: UIColor  {
+    switch discipline {
+    case "Monument":
+      return .red
+    case "Mural":
+      return .cyan
+    case "Plaque":
+      return .blue
+    case "Sculpture":
+      return .purple
+    default:
+      return .green
+    }
+  }
+  
+  var image: UIImage {
+    guard let name = discipline else { return #imageLiteral(resourceName: "Flag") }
+    
+    switch name {
+    case "Monument":
+      return #imageLiteral(resourceName: "Monument")
+    case "Sculpture":
+      return #imageLiteral(resourceName: "Sculpture")
+    case "Plaque":
+      return #imageLiteral(resourceName: "Plaque")
+    case "Mural":
+      return #imageLiteral(resourceName: "Mural")
+    default:
+      return #imageLiteral(resourceName: "Flag")
+    }
+  }
+}
+
